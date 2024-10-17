@@ -218,7 +218,7 @@ def main() -> None:
     convert_parser.add_argument(
         "-od",
         "--output-dir",
-        type=Path,
+        type=str,
         help="The directory where the output file will be saved.",
     )
     convert_parser.add_argument(
