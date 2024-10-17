@@ -75,7 +75,9 @@ def convert_to_json(
         None
     """
     normalized_language = language_map.get(language.lower())
-
+    print(f"Normalized Language : {normalized_language}")
+    print(f"Language Map is \n: {language_map}")
+ 
     if not normalized_language:
         raise ValueError(f"Language '{language.capitalize()}' is not recognized.")
 
