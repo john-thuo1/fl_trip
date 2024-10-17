@@ -1,0 +1,83 @@
+(scribe_env) john@jt:/mnt/c/Users/johnt/Desktop/Outreachy/Scribe-Data/tests/cli$ pytest -v test_convert.py
+================================================================ test session starts ================================================================
+platform linux -- Python 3.10.12, pytest-8.3.3, pluggy-1.5.0 -- /mnt/c/Users/johnt/Desktop/Outreachy/Scribe-Data/scribe_env/bin/python3
+cachedir: .pytest_cache
+rootdir: /mnt/c/Users/johnt/Desktop/Outreachy/Scribe-Data
+configfile: pyproject.toml
+plugins: cov-5.0.0
+collected 6 items
+
+test_convert.py::TestConvert::test_convert_to_json_normalized_language FAILED                                                                 [ 16%]
+test_convert.py::TestConvert::test_convert_to_json_unknown_language PASSED                                                                    [ 33%]
+test_convert.py::TestConvert::test_convert_to_sqlite PASSED                                                                                   [ 50%]
+test_convert.py::TestConvert::test_convert_to_sqlite_no_language PASSED                                                                       [ 66%]
+test_convert.py::TestConvert::test_convert_to_sqlite_no_output_dir PASSED                                                                     [ 83%]
+test_convert.py::TestConvert::test_convert_to_sqlite_with_language_iso PASSED                                                                 [100%]
+
+===================================================================== FAILURES ======================================================================
+_______________________________________________ TestConvert.test_convert_to_json_normalized_language ________________________________________________
+
+self = <test_convert.TestConvert testMethod=test_convert_to_json_normalized_language>, mock_path = <MagicMock name='Path' id='139747711347696'>      
+mock_language_map = <MagicMock name='language_map' id='139747711339728'>
+
+    @patch('scribe_data.cli.cli_utils.language_map')
+    @patch('scribe_data.cli.convert.Path')
+    def test_convert_to_json_normalized_language(self, mock_path, mock_language_map):
+
+        mock_language_map.return_value = lambda lang: {
+            'english': {'language': 'english', 'iso': 'en', 'qid': 'Q1860', 'remove-words': ['of', 'the', 'The', 'and'], 'ignore-words': []},        
+            'french': {'language': 'french', 'iso': 'fr', 'qid': 'Q150', 'remove-words': ['of', 'the', 'The', 'and'], 'ignore-words': ['XXe']}       
+        }.get(lang.lower())
+
+
+        # mock_language_map.get.return_value = {
+        #     'language': 'english', 'iso': 'en', 'qid': 'Q1860',
+        #     'remove-words': ['of', 'the', 'The', 'and'], 'ignore-words': []
+        # }
+
+        csv_data = "key,value\na,1\nb,2"
+        mock_file = StringIO(csv_data)
+        mock_path_obj = MagicMock(spec=Path)
+        mock_path.return_value = mock_path_obj
+        mock_path_obj.exists.return_value = True
+        mock_path_obj.open.return_value = mock_file
+
+        # pdb.set_trace()
+        convert_to_json(
+            language='English',
+            data_type="nouns",
+            output_type="json",
+            input_file=mock_file,
+            output_dir="/output_dir",
+            overwrite=True,
+        )
+
+>       mock_language_map.get.assert_called_with('english')
+
+test_convert.py:145:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <MagicMock name='language_map.get' id='139747700840224'>, args = ('english',), kwargs = {}, expected = "get('english')"
+actual = 'not called.', error_message = "expected call not found.\nExpected: get('english')\nActual: not called."
+
+    def assert_called_with(self, /, *args, **kwargs):
+        """assert that the last call was made with the specified arguments.
+
+        Raises an AssertionError if the args and keyword args passed in are
+        different to the last call to the mock."""
+        if self.call_args is None:
+            expected = self._format_mock_call_signature(args, kwargs)
+            actual = 'not called.'
+            error_message = ('expected call not found.\nExpected: %s\nActual: %s'
+                    % (expected, actual))
+>           raise AssertionError(error_message)
+E           AssertionError: expected call not found.
+E           Expected: get('english')
+E           Actual: not called.
+
+/usr/lib/python3.10/unittest/mock.py:920: AssertionError
+--------------------------------------------------------------- Captured stdout call ----------------------------------------------------------------
+Data for English nouns written to <MagicMock name='Path().__truediv__().__truediv__()' id='139747700848288'>
+============================================================== short test summary info ==============================================================
+FAILED test_convert.py::TestConvert::test_convert_to_json_normalized_language - AssertionError: expected call not found.
+============================================================ 1 failed, 5 passed in 1.13s ============================================================
