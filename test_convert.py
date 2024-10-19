@@ -275,37 +275,32 @@ class TestConvert(unittest.TestCase):
 
     @patch("scribe_data.cli.convert.language_map", autospec=True)
     @patch("scribe_data.cli.convert.Path", autospec=True)
-    def test_convert_standard_csv(self, mock_path_class, mock_language_map):
-        # Mock CSV input data
+    def test_convert_to_json_standard_csv(self, mock_path_class, mock_language_map):
+
         csv_data = "key,value\na,1\nb,2"
         expected_json = {"a": "1", "b": "2"}
-        mock_file_obj = StringIO(csv_data)  # Simulate reading from a CSV file
+        mock_file_obj = StringIO(csv_data) 
 
-        # Mock the language map for English
-        mock_language_map.get.return_value = {
-            'language': 'english',
-            'iso': 'en',
-            'qid': 'Q1860',
-            'remove-words': ['of', 'the', 'The', 'and'],
-            'ignore-words': []
-        }
 
-        # Mock input file path and ensure it's read correctly
+        mock_language_map.get.side_effect = lambda lang:  {
+            'english': {'language': 'english', 'iso': 'en', 'qid': 'Q1860', 'remove-words': ['of', 'the', 'The', 'and'], 'ignore-words': []},        
+            'french': {'language': 'french', 'iso': 'fr', 'qid': 'Q150', 'remove-words': ['of', 'the', 'The', 'and'], 'ignore-words': ['XXe']}       
+        }.get(lang.lower())  
+
+
         mock_input_file_path = MagicMock(spec=Path)
         mock_input_file_path.suffix = ".csv"
         mock_input_file_path.exists.return_value = True
         mock_input_file_path.open.return_value.__enter__.return_value = mock_file_obj
 
-        # Mock Path class behavior for input and output paths
         mock_path_class.side_effect = lambda x: mock_input_file_path if x == "test.csv" else Path(x)
 
-        # Use mock_open to simulate file writing
+
         mocked_open = mock_open()
 
-        # Patch Path.open() to return the mocked open handle
+
         with patch("pathlib.Path.open", mocked_open):
 
-            # Call the function to convert to JSON
             convert_to_json(
                 language='English',
                 data_type="nouns",
@@ -315,12 +310,93 @@ class TestConvert(unittest.TestCase):
                 overwrite=True,
             )
 
-            # Ensure the file was opened for writing
             mocked_open.assert_called_once_with("w", encoding="utf-8")
 
-            # Access the written data from the mock
             mock_file_handle = mocked_open()
             written_data = "".join(call.args[0] for call in mock_file_handle.write.call_args_list)
 
-        # Assert that the content written matches the expected JSON format
+        self.assertEqual(json.loads(written_data), expected_json)
+
+#----------------------------------------------------------------------------------------------------------------------------------------
+
+    @patch("scribe_data.cli.convert.language_map", autospec=True)
+    @patch("scribe_data.cli.convert.Path", autospec=True)
+    def test_convert_with_multiple_keys(self, mock_path_class, mock_language_map):
+
+        csv_data = "key,value1,value2\na,1,x\nb,2,y\nc,3,z"
+        expected_json = {
+            "a": {"value1": "1", "value2": "x"},
+            "b": {"value1": "2", "value2": "y"},
+            "c": {"value1": "3", "value2": "z"}
+        }
+        mock_file_obj = StringIO(csv_data)
+
+        mock_language_map.get.side_effect = lambda lang:  {
+            'english': {'language': 'english', 'iso': 'en', 'qid': 'Q1860', 'remove-words': ['of', 'the', 'The', 'and'], 'ignore-words': []},        
+            'french': {'language': 'french', 'iso': 'fr', 'qid': 'Q150', 'remove-words': ['of', 'the', 'The', 'and'], 'ignore-words': ['XXe']}       
+        }.get(lang.lower())  
+
+        mock_input_file_path = MagicMock(spec=Path)
+        mock_input_file_path.suffix = ".csv"
+        mock_input_file_path.exists.return_value = True
+        mock_input_file_path.open.return_value.__enter__.return_value = mock_file_obj
+        mock_path_class.side_effect = lambda x: mock_input_file_path if x == "test.csv" else Path(x)
+
+
+
+        mocked_open = mock_open()
+        with patch("pathlib.Path.open", mocked_open):
+            convert_to_json(
+                language='English',
+                data_type="nouns",
+                output_type="json",
+                input_file="test.csv",
+                output_dir="output",
+                overwrite=True,
+            )
+
+            mock_file_handle = mocked_open()
+            written_data = "".join(call.args[0] for call in mock_file_handle.write.call_args_list)
+        self.assertEqual(json.loads(written_data), expected_json)
+
+#======================================================================================================================
+
+
+    @patch("scribe_data.cli.convert.language_map", autospec=True)
+    @patch("scribe_data.cli.convert.Path", autospec=True)
+    def test_convert_with_complex_structure(self, mock_path_class, mock_language_map):
+
+        csv_data = "key,emoji,is_base,rank\na,😀,true,1\nb,😅,false,2"
+        expected_json = {
+            "a": [{"emoji": "😀", "is_base": True, "rank": 1}],
+            "b": [{"emoji": "😅", "is_base": False, "rank": 2}]
+        }
+        mock_file_obj = StringIO(csv_data)
+
+        mock_language_map.get.side_effect = lambda lang:  {
+            'english': {'language': 'english', 'iso': 'en', 'qid': 'Q1860', 'remove-words': ['of', 'the', 'The', 'and'], 'ignore-words': []},        
+            'french': {'language': 'french', 'iso': 'fr', 'qid': 'Q150', 'remove-words': ['of', 'the', 'The', 'and'], 'ignore-words': ['XXe']}       
+        }.get(lang.lower())  
+
+        # Mock input file path
+        mock_input_file_path = MagicMock(spec=Path)
+        mock_input_file_path.suffix = ".csv"
+        mock_input_file_path.exists.return_value = True
+        mock_input_file_path.open.return_value.__enter__.return_value = mock_file_obj
+        mock_path_class.side_effect = lambda x: mock_input_file_path if x == "test.csv" else Path(x)
+
+
+        mocked_open = mock_open()
+        with patch("pathlib.Path.open", mocked_open):
+            convert_to_json(
+                language='English',
+                data_type="nouns",
+                output_type="json",
+                input_file="test.csv",
+                output_dir="output",
+                overwrite=True,
+            )
+
+            mock_file_handle = mocked_open()
+            written_data = "".join(call.args[0] for call in mock_file_handle.write.call_args_list)
         self.assertEqual(json.loads(written_data), expected_json)
