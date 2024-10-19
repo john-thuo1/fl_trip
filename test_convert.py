@@ -26,6 +26,7 @@ import unittest
 from unittest.mock import MagicMock, mock_open, patch
 
 
+
 from scribe_data.cli.convert import (
     convert_to_sqlite,
     convert_to_json,
@@ -271,133 +272,79 @@ class TestConvert(unittest.TestCase):
         self.assertIn("Unsupported file extension", str(context.exception))
         self.assertEqual(str(context.exception), "Unsupported file extension '.txt' for test.txt. Please provide a '.csv' or '.tsv' file.")
 #---------------------------------------------------------------------------------------------------------------------------------------------------------
+    @patch("scribe_data.cli.convert.language_map", autospec=True)
     @patch("scribe_data.cli.convert.Path", autospec=True)
-    @patch("builtins.open", new_callable=mock_open)
-    @patch("scribe_data.cli.convert.language_map", return_value={'english': {'language': 'english'}}, autospec=True)
-    def test_convert_standard_csv(self, mock_language_map, mock_file, mock_path):
-        # CSV and expected JSON
+    def test_convert_standard_csv(self, mock_path_class, mock_language_map):
+        # Mock CSV input data
         csv_data = "key,value\na,1\nb,2"
         expected_json = {"a": "1", "b": "2"}
         mock_file_obj = StringIO(csv_data)
 
-        # Mocking Path object behavior
-        mock_path_obj = MagicMock(spec=Path)
-        mock_path.return_value = mock_path_obj
-        mock_path_obj.suffix = ".csv"
-        mock_path_obj.exists.return_value = True
-        mock_path_obj.open.return_value.__enter__.return_value = mock_file_obj
-        mock_path_obj.mkdir.return_value = None  
+        # Mock the language map for English
+        mock_language_map.get.return_value = {
+            'language': 'english',
+            'iso': 'en',
+            'qid': 'Q1860',
+            'remove-words': ['of', 'the', 'The', 'and'],
+            'ignore-words': []
+        }
 
-        # Simulate path concatenation behavior (mock output directory)
-        mock_output_file = "mocked_output_dir/English/nouns.json"
-        mock_path_obj.__truediv__.return_value = Path(mock_output_file)
+        # Mock input file path and ensure it's read correctly
+        mock_input_file_path = MagicMock(spec=Path)
+        mock_input_file_path.suffix = ".csv"
+        mock_input_file_path.exists.return_value = True
+        mock_input_file_path.open.return_value.__enter__.return_value = mock_file_obj
 
-        # Call the function with the mocked directory
-        convert_to_json(
-            language='English',
-            data_type="nouns",
-            output_type="json",
-            input_file="test.csv",
-            output_dir="mocked_output_dir", 
-            overwrite=True,
-        )
+        # Mock output directory and file path
+        mock_output_dir = MagicMock(spec=Path)  # /output
+        mock_output_subdir = MagicMock(spec=Path)  # /output/english
+        mock_output_file = MagicMock(spec=Path)  # /output/english/nouns.json
+        mock_output_file.exists.return_value = False  # Simulate file not existing yet
 
-        # Assert that the correct JSON data is being written to the mocked file
-        mock_file.assert_called_once_with(mock_output_file, "w", encoding="utf-8")
-        handle = mock_file()
-        written_data = handle.write.call_args[0][0]  
-        assert json.loads(written_data) == expected_json
+        # Setup path returns
+        mock_path_class.side_effect = lambda x: {
+            "test.csv": mock_input_file_path,
+            "output": mock_output_dir,
+            "output/english": mock_output_subdir
+        }.get(x, MagicMock(spec=Path))
 
+        # Ensure that concatenating paths returns a mock that behaves correctly
+        mock_output_dir.__truediv__.return_value = mock_output_subdir  # First concatenation (/output/english)
+        mock_output_subdir.__truediv__.return_value = mock_output_file  # Final concatenation (/output/english/nouns.json)
 
+        # Mock the file opening for writing using mock_open
+        mock_output_file_handle = mock_open()
+        
+        # Ensure that the open call returns the mock_output_file for writing
+        mock_output_file_handle.return_value.__enter__.return_value = StringIO()
 
+        with patch("builtins.open", mock_output_file_handle):
+            convert_to_json(
+                language='English',
+                data_type="nouns",
+                output_type="json",
+                input_file="test.csv",
+                output_dir="output",
+                overwrite=True,
+            )
 
+        # Ensure the file was opened for writing
+        mock_output_file.open.assert_called_once_with("w", encoding="utf-8")
 
+        # Capture the value written to the mocked output file
+        written_file_obj = mock_output_file_handle()  # This gets the MagicMock instance
 
-    # @patch("scribe_data.cli.convert.Path")
-    # @patch("builtins.open", new_callable=mock_open)
-    # @patch("scribe_data.cli.convert.language_map", return_value={'english': {'language': 'english'}})
-    # def test_convert_csv_with_multiple_fields(self, mock_language_map, mock_file, mock_path):
-    #     csv_data = "key,value1,value2\nitem1,10,20\nitem2,30,40"
-    #     expected_json = {
-    #         "item1": {"value1": "10", "value2": "20"},
-    #         "item2": {"value1": "30", "value2": "40"}
-    #     }
-    #     mock_file_obj = StringIO(csv_data)
+        # Check that the write method was called
+        write_calls = written_file_obj.write.call_args_list
 
-    #     # Mocking Path object behavior
-    #     mock_path_obj = MagicMock(spec=Path)
-    #     mock_path.return_value = mock_path_obj
-    #     mock_path_obj.suffix = ".csv"
-    #     mock_path_obj.exists.return_value = True
-    #     mock_path_obj.open.return_value.__enter__.return_value = mock_file_obj
+        # Debugging: print the write calls if needed
+        print(f"Write calls: {write_calls}")
 
-    #     # Call the function
-    #     convert_to_json(
-    #         language='English',
-    #         data_type="nouns",
-    #         output_type="json",
-    #         input_file="test.csv",
-    #         output_dir="/output_dir",
-    #         overwrite=True,
-    #     )
+        # If no write calls were made, raise an error for clarity
+        self.assertTrue(write_calls, "No data was written to the output file.")
 
-    #     # Assert that the correct JSON data is being written
-    #     mock_file.assert_called_once_with("/output_dir/English/nouns.json", "w", encoding="utf-8")
-    #     handle = mock_file()
-    #     written_data = handle.write.call_args[0][0]
-    #     self.assertEqual(json.loads(written_data), expected_json)
+        # Retrieve written data from the mocked output file
+        written_data = ''.join(call[0][0] for call in write_calls)
 
-    # @patch("scribe_data.cli.convert.Path")
-    # @patch("builtins.open", new_callable=mock_open)
-    # @patch("scribe_data.cli.convert.language_map", return_value={'english': {'language': 'english'}})
-    # def test_convert_empty_csv(self, mock_language_map, mock_file, mock_path):
-    #     csv_data = ""
-    #     expected_json = {}  # Expecting an empty dictionary for empty CSV
-    #     mock_file_obj = StringIO(csv_data)
-
-    #     # Mocking Path object behavior
-    #     mock_path_obj = MagicMock(spec=Path)
-    #     mock_path.return_value = mock_path_obj
-    #     mock_path_obj.suffix = ".csv"
-    #     mock_path_obj.exists.return_value = True
-    #     mock_path_obj.open.return_value.__enter__.return_value = mock_file_obj
-
-    #     # Call the function
-    #     convert_to_json(
-    #         language='English',
-    #         data_type="nouns",
-    #         output_type="json",
-    #         input_file="test.csv",
-    #         output_dir="/output_dir",
-    #         overwrite=True,
-    #     )
-
-    #     # Assert that the correct JSON data is being written
-    #     mock_file.assert_called_once_with("/output_dir/English/nouns.json", "w", encoding="utf-8")
-    #     handle = mock_file()
-    #     written_data = handle.write.call_args[0][0]
-    #     self.assertEqual(json.loads(written_data), expected_json)
-
-    # @patch("scribe_data.cli.convert.Path")
-    # @patch("builtins.open", new_callable=mock_open)
-    # @patch("scribe_data.cli.convert.language_map", return_value={'english': {'language': 'english'}})
-    # def test_convert_malformed_csv(self, mock_language_map, mock_file, mock_path):
-    #     csv_data = "key,value\n1,2\n3"  # Missing value for key 3
-    #     mock_file_obj = StringIO(csv_data)
-
-    #     # Mocking Path object behavior
-    #     mock_path_obj = MagicMock(spec=Path)
-    #     mock_path.return_value = mock_path_obj
-    #     mock_path_obj.suffix = ".csv"
-    #     mock_path_obj.exists.return_value = True
-    #     mock_path_obj.open.return_value.__enter__.return_value = mock_file_obj
-
-    #     with self.assertRaises(Exception):  # Adjust to a specific exception if you know it
-    #         convert_to_json(
-    #             language='English',
-    #             data_type="nouns",
-    #             output_type="json",
-    #             input_file="test.csv",
-    #             output_dir="/output_dir",
-    #             overwrite=True,
-    #         )
+        # Assert that the data written matches the expected JSON format
+        self.assertEqual(json.loads(written_data), expected_json)  # Verify the written data matches the expected JSON
