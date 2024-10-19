@@ -272,13 +272,14 @@ class TestConvert(unittest.TestCase):
         self.assertIn("Unsupported file extension", str(context.exception))
         self.assertEqual(str(context.exception), "Unsupported file extension '.txt' for test.txt. Please provide a '.csv' or '.tsv' file.")
 #---------------------------------------------------------------------------------------------------------------------------------------------------------
+
     @patch("scribe_data.cli.convert.language_map", autospec=True)
     @patch("scribe_data.cli.convert.Path", autospec=True)
     def test_convert_standard_csv(self, mock_path_class, mock_language_map):
         # Mock CSV input data
         csv_data = "key,value\na,1\nb,2"
         expected_json = {"a": "1", "b": "2"}
-        mock_file_obj = StringIO(csv_data)
+        mock_file_obj = StringIO(csv_data)  # Simulate reading from a CSV file
 
         # Mock the language map for English
         mock_language_map.get.return_value = {
@@ -295,30 +296,16 @@ class TestConvert(unittest.TestCase):
         mock_input_file_path.exists.return_value = True
         mock_input_file_path.open.return_value.__enter__.return_value = mock_file_obj
 
-        # Mock output directory and file path
-        mock_output_dir = MagicMock(spec=Path)  # /output
-        mock_output_subdir = MagicMock(spec=Path)  # /output/english
-        mock_output_file = MagicMock(spec=Path)  # /output/english/nouns.json
-        mock_output_file.exists.return_value = False  # Simulate file not existing yet
+        # Mock Path class behavior for input and output paths
+        mock_path_class.side_effect = lambda x: mock_input_file_path if x == "test.csv" else Path(x)
 
-        # Setup path returns
-        mock_path_class.side_effect = lambda x: {
-            "test.csv": mock_input_file_path,
-            "output": mock_output_dir,
-            "output/english": mock_output_subdir
-        }.get(x, MagicMock(spec=Path))
+        # Use mock_open to simulate file writing
+        mocked_open = mock_open()
 
-        # Ensure that concatenating paths returns a mock that behaves correctly
-        mock_output_dir.__truediv__.return_value = mock_output_subdir  # First concatenation (/output/english)
-        mock_output_subdir.__truediv__.return_value = mock_output_file  # Final concatenation (/output/english/nouns.json)
+        # Patch Path.open() to return the mocked open handle
+        with patch("pathlib.Path.open", mocked_open):
 
-        # Mock the file opening for writing using mock_open
-        mock_output_file_handle = mock_open()
-        
-        # Ensure that the open call returns the mock_output_file for writing
-        mock_output_file_handle.return_value.__enter__.return_value = StringIO()
-
-        with patch("builtins.open", mock_output_file_handle):
+            # Call the function to convert to JSON
             convert_to_json(
                 language='English',
                 data_type="nouns",
@@ -328,23 +315,12 @@ class TestConvert(unittest.TestCase):
                 overwrite=True,
             )
 
-        # Ensure the file was opened for writing
-        mock_output_file.open.assert_called_once_with("w", encoding="utf-8")
+            # Ensure the file was opened for writing
+            mocked_open.assert_called_once_with("w", encoding="utf-8")
 
-        # Capture the value written to the mocked output file
-        written_file_obj = mock_output_file_handle()  # This gets the MagicMock instance
+            # Access the written data from the mock
+            mock_file_handle = mocked_open()
+            written_data = "".join(call.args[0] for call in mock_file_handle.write.call_args_list)
 
-        # Check that the write method was called
-        write_calls = written_file_obj.write.call_args_list
-
-        # Debugging: print the write calls if needed
-        print(f"Write calls: {write_calls}")
-
-        # If no write calls were made, raise an error for clarity
-        self.assertTrue(write_calls, "No data was written to the output file.")
-
-        # Retrieve written data from the mocked output file
-        written_data = ''.join(call[0][0] for call in write_calls)
-
-        # Assert that the data written matches the expected JSON format
-        self.assertEqual(json.loads(written_data), expected_json)  # Verify the written data matches the expected JSON
+        # Assert that the content written matches the expected JSON format
+        self.assertEqual(json.loads(written_data), expected_json)
