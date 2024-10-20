@@ -24,7 +24,7 @@ from io import StringIO
 import json
 from pathlib import Path
 import unittest
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, Mock, mock_open, patch
 
 
 from scribe_data.cli.convert import (
@@ -35,11 +35,21 @@ from scribe_data.cli.convert import (
 
 
 class TestConvert(unittest.TestCase):
-    # MARK: JSON Tests
+    # Helper Functions
+    def setup_language_map(self, mock_language_map: Mock) -> None:
+        """
+        Set up the mock language map for testing.
 
-    @patch("scribe_data.cli.convert.language_map", autospec=True)
-    @patch("scribe_data.cli.convert.Path", autospec=True)
-    def test_convert_to_json_normalized_language(self, mock_path, mock_language_map):
+        Parameters
+        ---------
+            mock_language_map: Mock
+                Mock object representing the language map
+                to be configured.
+
+        Returns
+        -------
+            None
+        """
         mock_language_map.get.side_effect = lambda lang: {
             "english": {
                 "language": "english",
@@ -57,17 +67,42 @@ class TestConvert(unittest.TestCase):
             },
         }.get(lang.lower())
 
-        # Mocking Path object behavior
+    def normalize_line_endings(self, data: str) -> str:
+        """
+        Normalize line endings in a given string.
+
+        This method replaces Windows-style line endings (`\r\n`) and
+        standalone carriage return characters (`\r`) with Unix-style
+        line endings (`\n`). This is useful for ensuring consistent
+        line endings when comparing strings or writing to files.
+
+        Parameters
+        ----------
+            data: str
+                The input string whose line endings are to be normalized.
+
+        Returns
+        ---------
+            data: str
+                The input string with normalized line endings.
+        """
+        return data.replace("\r\n", "\n").replace("\r", "\n")
+
+    # MARK: JSON Tests
+
+    @patch("scribe_data.cli.convert.language_map", autospec=True)
+    @patch("scribe_data.cli.convert.Path", autospec=True)
+    def test_convert_to_json_normalized_language(self, mock_path, mock_language_map):
+        self.setup_language_map(mock_language_map)
+
         mock_path_obj = MagicMock(spec=Path)
         mock_path.return_value = mock_path_obj
 
-        # Set the file extension to .csv/ .tsv
         mock_path_obj.suffix = ".csv"
         mock_path_obj.exists.return_value = True
 
-        # Call the function with 'English'
         convert_to_json(
-            language="English",
+            language="French",
             data_type="nouns",
             output_type="json",
             input_file="input.csv",
@@ -75,14 +110,12 @@ class TestConvert(unittest.TestCase):
             overwrite=True,
         )
 
-        # Verify that the mock's get method was called with 'english' (lowercased by the function)
-        mock_language_map.get.assert_called_with("english")
+        mock_language_map.get.assert_called_with("french")
 
     @patch("scribe_data.cli.convert.language_map", autospec=True)
     @patch("scribe_data.cli.convert.Path", autospec=True)
     def test_convert_to_json_unknown_language(self, mock_path, mock_language_map):
         mock_language_map.get.return_value = None
-
         # Mock for input file and output_directory
         mock_input_file_path = MagicMock(spec=Path)
         mock_input_file_path.exists.return_value = True
@@ -105,7 +138,6 @@ class TestConvert(unittest.TestCase):
 
     @patch("scribe_data.cli.convert.Path")
     def test_convert_to_json_with_input_file(self, mock_path):
-        # Sample Data
         csv_data = "key,value\na,1\nb,2"
         mock_file = StringIO(csv_data)
 
@@ -126,7 +158,6 @@ class TestConvert(unittest.TestCase):
 
         mock_path_obj.exists.assert_called_once()
 
-        # Verify the file was opened for reading
         mock_path_obj.open.assert_called_once_with("r", encoding="utf-8")
 
     @patch("scribe_data.cli.convert.Path")
@@ -211,7 +242,6 @@ class TestConvert(unittest.TestCase):
             "Unsupported file extension '.txt' for test.txt. Please provide a '.csv' or '.tsv' file.",
         )
 
-    # ====================================================================================================================
     @patch("scribe_data.cli.convert.language_map", autospec=True)
     @patch("scribe_data.cli.convert.Path", autospec=True)
     def test_convert_to_json_standard_csv(self, mock_path_class, mock_language_map):
@@ -219,22 +249,7 @@ class TestConvert(unittest.TestCase):
         expected_json = {"a": "1", "b": "2"}
         mock_file_obj = StringIO(csv_data)
 
-        mock_language_map.get.side_effect = lambda lang: {
-            "english": {
-                "language": "english",
-                "iso": "en",
-                "qid": "Q1860",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": [],
-            },
-            "french": {
-                "language": "french",
-                "iso": "fr",
-                "qid": "Q150",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": ["XXe"],
-            },
-        }.get(lang.lower())
+        self.setup_language_map(mock_language_map)
 
         mock_input_file_path = MagicMock(spec=Path)
         mock_input_file_path.suffix = ".csv"
@@ -250,7 +265,6 @@ class TestConvert(unittest.TestCase):
         with patch("pathlib.Path.open", mocked_open), patch(
             "pathlib.Path.mkdir"
         ) as mock_mkdir:
-            # Prevent actual directory creation
             mock_mkdir.return_value = None
             convert_to_json(
                 language="English",
@@ -283,22 +297,7 @@ class TestConvert(unittest.TestCase):
         }
         mock_file_obj = StringIO(csv_data)
 
-        mock_language_map.get.side_effect = lambda lang: {
-            "english": {
-                "language": "english",
-                "iso": "en",
-                "qid": "Q1860",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": [],
-            },
-            "french": {
-                "language": "french",
-                "iso": "fr",
-                "qid": "Q150",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": ["XXe"],
-            },
-        }.get(lang.lower())
+        self.setup_language_map(mock_language_map)
 
         mock_input_file_path = MagicMock(spec=Path)
         mock_input_file_path.suffix = ".csv"
@@ -340,22 +339,7 @@ class TestConvert(unittest.TestCase):
         }
         mock_file_obj = StringIO(csv_data)
 
-        mock_language_map.get.side_effect = lambda lang: {
-            "english": {
-                "language": "english",
-                "iso": "en",
-                "qid": "Q1860",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": [],
-            },
-            "french": {
-                "language": "french",
-                "iso": "fr",
-                "qid": "Q150",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": ["XXe"],
-            },
-        }.get(lang.lower())
+        self.setup_language_map(mock_language_map)
 
         mock_input_file_path = MagicMock(spec=Path)
         mock_input_file_path.suffix = ".csv"
@@ -392,23 +376,7 @@ class TestConvert(unittest.TestCase):
     def test_convert_to_csv_or_json_normalized_language(
         self, mock_path, mock_language_map
     ):
-        # Mock the language map to return a normalized language for testing
-        mock_language_map.get.side_effect = lambda lang: {
-            "english": {
-                "language": "english",
-                "iso": "en",
-                "qid": "Q1860",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": [],
-            },
-            "french": {
-                "language": "french",
-                "iso": "fr",
-                "qid": "Q150",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": ["XXe"],
-            },
-        }.get(lang.lower())
+        self.setup_language_map(mock_language_map)
 
         mock_path_obj = MagicMock(spec=Path)
         mock_path.return_value = mock_path_obj
@@ -420,7 +388,6 @@ class TestConvert(unittest.TestCase):
         mock_open_function = mock_open(read_data=mock_json_data)
         mock_path_obj.open = mock_open_function
 
-        # Call the function with 'English'
         convert_to_csv_or_tsv(
             language="English",
             data_type="nouns",
@@ -439,22 +406,7 @@ class TestConvert(unittest.TestCase):
     def test_convert_to_csv_or_json_unknown_language(
         self, mock_path, mock_language_map
     ):
-        mock_language_map.get.side_effect = lambda lang: {
-            "english": {
-                "language": "english",
-                "iso": "en",
-                "qid": "Q1860",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": [],
-            },
-            "french": {
-                "language": "french",
-                "iso": "fr",
-                "qid": "Q150",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": ["XXe"],
-            },
-        }.get(lang.lower())
+        self.setup_language_map(mock_language_map)
 
         mock_path_obj = MagicMock(spec=Path)
         mock_path.return_value = mock_path_obj
@@ -490,22 +442,7 @@ class TestConvert(unittest.TestCase):
 
         mock_file_obj = StringIO(json_data)
 
-        mock_language_map.get.side_effect = lambda lang: {
-            "english": {
-                "language": "english",
-                "iso": "en",
-                "qid": "Q1860",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": [],
-            },
-            "french": {
-                "language": "french",
-                "iso": "fr",
-                "qid": "Q150",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": ["XXe"],
-            },
-        }.get(lang.lower())
+        self.setup_language_map(mock_language_map)
 
         mock_input_file_path = MagicMock(spec=Path)
         mock_input_file_path.suffix = ".json"
@@ -536,11 +473,8 @@ class TestConvert(unittest.TestCase):
             call.args[0] for call in mock_file_handle.write.call_args_list
         )
 
-        # Normalize the line endings for comparison
-        written_data = written_data.replace("\r\n", "\n").replace("\r", "\n")
-        expected_csv_output = expected_csv_output.replace("\r\n", "\n").replace(
-            "\r", "\n"
-        )
+        written_data = self.normalize_line_endings(written_data)
+        expected_csv_output = self.normalize_line_endings(expected_csv_output)
 
         self.assertEqual(written_data, expected_csv_output)
 
@@ -555,22 +489,7 @@ class TestConvert(unittest.TestCase):
 
         mock_file_obj = StringIO(json_data)
 
-        mock_language_map.get.side_effect = lambda lang: {
-            "english": {
-                "language": "english",
-                "iso": "en",
-                "qid": "Q1860",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": [],
-            },
-            "french": {
-                "language": "french",
-                "iso": "fr",
-                "qid": "Q150",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": ["XXe"],
-            },
-        }.get(lang.lower())
+        self.setup_language_map(mock_language_map)
 
         mock_input_file_path = MagicMock(spec=Path)
         mock_input_file_path.suffix = ".json"
@@ -600,10 +519,8 @@ class TestConvert(unittest.TestCase):
             call.args[0] for call in mock_file_handle.write.call_args_list
         )
 
-        written_data = written_data.replace("\r\n", "\n").replace("\r", "\n")
-        expected_tsv_output = expected_tsv_output.replace("\r\n", "\n").replace(
-            "\r", "\n"
-        )
+        written_data = self.normalize_line_endings(written_data)
+        expected_tsv_output = self.normalize_line_endings(expected_tsv_output)
 
         self.assertEqual(written_data, expected_tsv_output)
 
@@ -618,22 +535,7 @@ class TestConvert(unittest.TestCase):
         expected_csv_output = "noun,value1,value2\n" "a,1,x\n" "b,2,y\n"
         mock_file_obj = StringIO(json_data)
 
-        mock_language_map.get.side_effect = lambda lang: {
-            "english": {
-                "language": "english",
-                "iso": "en",
-                "qid": "Q1860",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": [],
-            },
-            "french": {
-                "language": "french",
-                "iso": "fr",
-                "qid": "Q150",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": ["XXe"],
-            },
-        }.get(lang.lower())
+        self.setup_language_map(mock_language_map)
 
         mock_input_file_path = MagicMock(spec=Path)
         mock_input_file_path.suffix = ".json"
@@ -663,10 +565,8 @@ class TestConvert(unittest.TestCase):
             call.args[0] for call in mock_file_handle.write.call_args_list
         )
 
-        written_data = written_data.replace("\r\n", "\n").replace("\r", "\n")
-        expected_csv_output = expected_csv_output.replace("\r\n", "\n").replace(
-            "\r", "\n"
-        )
+        written_data = self.normalize_line_endings(written_data)
+        expected_csv_output = self.normalize_line_endings(expected_csv_output)
         self.assertEqual(written_data, expected_csv_output)
 
     @patch("scribe_data.cli.convert.language_map", autospec=True)
@@ -681,22 +581,7 @@ class TestConvert(unittest.TestCase):
 
         mock_file_obj = StringIO(json_data)
 
-        mock_language_map.get.side_effect = lambda lang: {
-            "english": {
-                "language": "english",
-                "iso": "en",
-                "qid": "Q1860",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": [],
-            },
-            "french": {
-                "language": "french",
-                "iso": "fr",
-                "qid": "Q150",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": ["XXe"],
-            },
-        }.get(lang.lower())
+        self.setup_language_map(mock_language_map)
 
         mock_input_file_path = MagicMock(spec=Path)
         mock_input_file_path.suffix = ".json"
@@ -726,10 +611,8 @@ class TestConvert(unittest.TestCase):
             call.args[0] for call in mock_file_handle.write.call_args_list
         )
 
-        written_data = written_data.replace("\r\n", "\n").replace("\r", "\n")
-        expected_tsv_output = expected_tsv_output.replace("\r\n", "\n").replace(
-            "\r", "\n"
-        )
+        written_data = self.normalize_line_endings(written_data)
+        expected_tsv_output = self.normalize_line_endings(expected_tsv_output)
 
         self.assertEqual(written_data, expected_tsv_output)
 
@@ -744,22 +627,7 @@ class TestConvert(unittest.TestCase):
         )
         mock_file_obj = StringIO(json_data)
 
-        mock_language_map.get.side_effect = lambda lang: {
-            "english": {
-                "language": "english",
-                "iso": "en",
-                "qid": "Q1860",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": [],
-            },
-            "french": {
-                "language": "french",
-                "iso": "fr",
-                "qid": "Q150",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": ["XXe"],
-            },
-        }.get(lang.lower())
+        self.setup_language_map(mock_language_map)
 
         mock_input_file_path = MagicMock(spec=Path)
         mock_input_file_path.suffix = ".json"
@@ -789,10 +657,8 @@ class TestConvert(unittest.TestCase):
             call.args[0] for call in mock_file_handle.write.call_args_list
         )
 
-        written_data = written_data.replace("\r\n", "\n").replace("\r", "\n")
-        expected_csv_output = expected_csv_output.replace("\r\n", "\n").replace(
-            "\r", "\n"
-        )
+        written_data = self.normalize_line_endings(written_data)
+        expected_csv_output = self.normalize_line_endings(expected_csv_output)
         self.assertEqual(written_data, expected_csv_output)
 
     @patch("scribe_data.cli.convert.language_map", autospec=True)
@@ -806,22 +672,7 @@ class TestConvert(unittest.TestCase):
         )
         mock_file_obj = StringIO(json_data)
 
-        mock_language_map.get.side_effect = lambda lang: {
-            "english": {
-                "language": "english",
-                "iso": "en",
-                "qid": "Q1860",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": [],
-            },
-            "french": {
-                "language": "french",
-                "iso": "fr",
-                "qid": "Q150",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": ["XXe"],
-            },
-        }.get(lang.lower())
+        self.setup_language_map(mock_language_map)
 
         # Mock input file path
         mock_input_file_path = MagicMock(spec=Path)
@@ -853,10 +704,8 @@ class TestConvert(unittest.TestCase):
             call.args[0] for call in mock_file_handle.write.call_args_list
         )
 
-        written_data = written_data.replace("\r\n", "\n").replace("\r", "\n")
-        expected_tsv_output = expected_tsv_output.replace("\r\n", "\n").replace(
-            "\r", "\n"
-        )
+        written_data = self.normalize_line_endings(written_data)
+        expected_tsv_output = self.normalize_line_endings(expected_tsv_output)
         self.assertEqual(written_data, expected_tsv_output)
 
     @patch("scribe_data.cli.convert.language_map", autospec=True)
@@ -871,22 +720,7 @@ class TestConvert(unittest.TestCase):
         )
         mock_file_obj = StringIO(json_data)
 
-        mock_language_map.get.side_effect = lambda lang: {
-            "english": {
-                "language": "english",
-                "iso": "en",
-                "qid": "Q1860",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": [],
-            },
-            "french": {
-                "language": "french",
-                "iso": "fr",
-                "qid": "Q150",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": ["XXe"],
-            },
-        }.get(lang.lower())
+        self.setup_language_map(mock_language_map)
 
         mock_input_file_path = MagicMock(spec=Path)
         mock_input_file_path.suffix = ".json"
@@ -917,10 +751,8 @@ class TestConvert(unittest.TestCase):
             call.args[0] for call in mock_file_handle.write.call_args_list
         )
 
-        written_data = written_data.replace("\r\n", "\n").replace("\r", "\n")
-        expected_csv_output = expected_csv_output.replace("\r\n", "\n").replace(
-            "\r", "\n"
-        )
+        written_data = self.normalize_line_endings(written_data)
+        expected_csv_output = self.normalize_line_endings(expected_csv_output)
         self.assertEqual(written_data, expected_csv_output)
 
     @patch("scribe_data.cli.convert.language_map", autospec=True)
@@ -935,24 +767,8 @@ class TestConvert(unittest.TestCase):
         )
         mock_file_obj = StringIO(json_data)
 
-        mock_language_map.get.side_effect = lambda lang: {
-            "english": {
-                "language": "english",
-                "iso": "en",
-                "qid": "Q1860",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": [],
-            },
-            "french": {
-                "language": "french",
-                "iso": "fr",
-                "qid": "Q150",
-                "remove-words": ["of", "the", "The", "and"],
-                "ignore-words": ["XXe"],
-            },
-        }.get(lang.lower())
+        self.setup_language_map(mock_language_map)
 
-        # Mock input file path
         mock_input_file_path = MagicMock(spec=Path)
         mock_input_file_path.suffix = ".json"
         mock_input_file_path.exists.return_value = True
@@ -967,7 +783,6 @@ class TestConvert(unittest.TestCase):
         with patch("pathlib.Path.open", mocked_open), patch(
             "pathlib.Path.mkdir"
         ) as mock_mkdir:
-            # Prevent actual directory creation
             mock_mkdir.return_value = None
             convert_to_csv_or_tsv(
                 language="English",
@@ -982,10 +797,8 @@ class TestConvert(unittest.TestCase):
         written_data = "".join(
             call.args[0] for call in mock_file_handle.write.call_args_list
         )
-        written_data = written_data.replace("\r\n", "\n").replace("\r", "\n")
-        expected_tsv_output = expected_tsv_output.replace("\r\n", "\n").replace(
-            "\r", "\n"
-        )
+        written_data = self.normalize_line_endings(written_data)
+        expected_tsv_output = self.normalize_line_endings(expected_tsv_output)
         self.assertEqual(written_data, expected_tsv_output)
 
     # MARK: SQLITE Tests
